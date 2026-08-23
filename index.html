@@ -519,8 +519,8 @@
             <label class="field-label" for="radiusSlider" style="margin:0;">Search radius</label>
             <span class="radius-value num" id="radiusValue">500 m</span>
           </div>
-          <input type="range" id="radiusSlider" min="0" max="7" step="1" value="1" />
-          <div class="radius-scale"><span>300 m</span><span>5 km</span></div>
+          <input type="range" id="radiusSlider" min="0" max="10" step="1" value="1" />
+          <div class="radius-scale"><span>300 m</span><span>15 km</span></div>
           <p class="hint" id="walkHint" style="margin-top:10px;"></p>
         </div>
 
@@ -531,6 +531,12 @@
 
     <!-- STEP 3: FILTERS -->
     <section class="screen" id="screen-3" aria-labelledby="s3h">
+      <div class="location-chip" id="locChip3">
+        <span>📍</span>
+        <span id="locChipText3" class="mono" style="font-size:13px;">—</span>
+        <button class="change-btn" id="btnChangeLoc3" type="button">Change</button>
+      </div>
+
       <div class="card">
         <div class="eyebrow">Step 3 · Narrow it down</div>
         <h2 id="s3h" style="font-size:22px;">Any preferences?</h2>
@@ -636,7 +642,7 @@
   "use strict";
 
   /* ---------- constants ---------- */
-  var RADIUS_STEPS = [300, 500, 750, 1000, 1500, 2000, 3000, 5000];
+  var RADIUS_STEPS = [300, 500, 750, 1000, 1500, 2000, 3000, 5000, 7500, 10000, 15000];
   var OVERPASS_ENDPOINTS = [
     "https://overpass-api.de/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",
@@ -691,7 +697,9 @@
   }
   function fmtDist(m) {
     if (m < 950) return Math.round(m / 10) * 10 + " m";
-    return (m / 1000).toFixed(1) + " km";
+    var km = (m / 1000).toFixed(1);
+    if (km.slice(-2) === ".0") km = km.slice(0, -2);
+    return km + " km";
   }
   function fmtWalk(m) {
     var mins = Math.max(1, Math.round(m / 80));
@@ -758,6 +766,7 @@
     state.loc = { lat: lat, lon: lon, label: label || (lat.toFixed(4) + ", " + lon.toFixed(4)) };
     saveLocal("tew_last_loc", state.loc);
     $("locChipText").textContent = state.loc.label;
+    $("locChipText3").textContent = state.loc.label;
     goToStep(2);
   }
 
@@ -1064,6 +1073,7 @@
   });
 
   $("btnChangeLoc").addEventListener("click", function () { goToStep(1); });
+  $("btnChangeLoc3").addEventListener("click", function () { goToStep(1); });
 
   /* restore last known location as a convenience prefill */
   (function restoreLoc() {
@@ -1528,8 +1538,20 @@
     var addr = addrParts.length ? addrParts.join(" ") : "Address not listed on OpenStreetMap";
     $("resultAddress").textContent = addr;
 
-    var q = encodeURIComponent(place.name + " " + place.lat + "," + place.lon);
-    $("resultMapsLink").href = "https://www.google.com/maps/search/?api=1&query=" + q;
+    // Prefer name + street address for the Maps link — Google's own search
+    // matches "<name>, <address>" to the business's actual listing far more
+    // reliably than a raw lat/lon, which often just drops a generic pin at
+    // that point instead of opening the place's card (reviews, hours, etc).
+    // Coordinates are kept only as a fallback when OSM has no address tagged.
+    var mapQuery;
+    if (addrParts.length) {
+      var addrForQuery = addrParts.join(" ");
+      if (place.tags["addr:postcode"]) addrForQuery += " " + place.tags["addr:postcode"];
+      mapQuery = place.name + ", " + addrForQuery;
+    } else {
+      mapQuery = place.name + " " + place.lat + "," + place.lon;
+    }
+    $("resultMapsLink").href = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(mapQuery);
 
     $("resultOverlay").style.display = "flex";
   }
@@ -1552,6 +1574,7 @@
   /* ---------- resume from saved location on load ---------- */
   if (state.loc) {
     $("locChipText").textContent = state.loc.label;
+    $("locChipText3").textContent = state.loc.label;
   }
 
   window.addEventListener("resize", function () {

@@ -7,10 +7,11 @@ Can't decide where to eat? This is a single-page web app that finds real food sp
 ## How it works
 
 - **Location** — either "Use my current location" (browser geolocation) or type an address, which is geocoded via [Nominatim](https://nominatim.org/) (OpenStreetMap's free geocoder), with [OneMap](https://www.onemap.gov.sg/) as the primary, more accurate source for Singapore postal codes.
-- **Nearby food** — queried live from the [Overpass API](https://overpass-api.de/) (OpenStreetMap data): restaurants, cafés, fast food, hawker centres/food courts, pubs, bars, ice cream, bakeries, confectioneries, delis, pastry shops, and canteens — matched as points, buildings, or larger complexes. If a search comes back thin (common in less-mapped residential areas), the app automatically widens the radius up to two tiers before giving up, and tells you when it did.
+- **Nearby food** — queried live from the [Overpass API](https://overpass-api.de/) (OpenStreetMap data): restaurants, cafés, fast food, hawker centres/food courts, pubs, bars, ice cream, bakeries, confectioneries, delis, pastry shops, and canteens — matched as points, buildings, or larger complexes. If a search comes back thin (common in less-mapped residential areas), the app automatically widens the radius up to two tiers before giving up, and tells you when it did. The manual search radius slider goes up to 15 km if you want to cast a much wider net yourself.
 - **Filters** — cuisine (auto-built from what's actually nearby), a tighter "within" distance, price level, and dietary needs (halal / vegetarian / vegan).
 - **Wheel** — a canvas-drawn roulette wheel picks a fair random winner from your filtered list (capped at 24 spots on screen at once; "Show a different 24" reshuffles if you have more matches).
-- **Result** — name, distance, walking time, and a one-tap link to open it in Google Maps.
+- **Result** — name, distance, walking time, and a one-tap link to open it in Google Maps. The link uses the place's name and street address (when OpenStreetMap has one tagged) so it lands on the actual business listing rather than a generic pin — falls back to name + coordinates when no address is tagged.
+- **Changing your mind** — a "Change" button on the location pill (shown on both the radius and filters screens) lets you jump straight back to the address search at any point in the flow.
 
 No backend, no build step, no API keys, no cost. It's one HTML file that runs entirely in the browser.
 
