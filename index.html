@@ -795,6 +795,72 @@
     return { primary: parts[0] || displayName, secondary: parts.slice(1, 4).join(", ") };
   }
 
+  // OneMap is Singapore's own government geocoder — free, no API key, and far
+  // more reliable for SG postal codes than OpenStreetMap's Nominatim, whose
+  // postcode coverage has real gaps (a lookup that finds nothing there often
+  // silently falls back to matching just "Singapore" as a country-level place,
+  // which is how a postal code used to resolve to a generic "Singapore" label
+  // instead of the real block/street). Tried first; Nominatim is the fallback
+  // if OneMap is ever unreachable.
+  function formatOneMapResult(r) {
+    var road = r.ROAD_NAME ? titleCase(r.ROAD_NAME) : "";
+    var blk = r.BLK_NO && r.BLK_NO !== "NIL" ? r.BLK_NO + " " : "";
+    var blkRoad = (blk + road).trim();
+    var building = r.BUILDING && r.BUILDING !== "NIL" ? titleCase(r.BUILDING) : "";
+    var primary = building || blkRoad || r.ADDRESS || ("Singapore " + r.POSTAL);
+    var secondaryParts = [];
+    if (building && blkRoad) secondaryParts.push(blkRoad);
+    secondaryParts.push("Singapore " + r.POSTAL);
+    return {
+      lat: parseFloat(r.LATITUDE),
+      lon: parseFloat(r.LONGITUDE),
+      primary: primary,
+      secondary: secondaryParts.join(", "),
+      label: primary
+    };
+  }
+
+  function oneMapSearch(code, signal) {
+    var url = "https://www.onemap.gov.sg/api/common/elastic/search?searchVal="
+      + encodeURIComponent(code) + "&returnGeom=Y&getAddrDetails=Y&pageNum=1";
+    return fetch(url, { signal: signal }).then(function (r) {
+      if (!r.ok) throw new Error("onemap bad status " + r.status);
+      return r.json();
+    }).then(function (data) {
+      return (data && data.results ? data.results : []).map(formatOneMapResult);
+    });
+  }
+
+  function fallbackNominatimPostalItems(code, signal) {
+    var structuredUrl = "https://nominatim.openstreetmap.org/search?format=json&limit=6&postalcode="
+      + encodeURIComponent(code) + "&country=Singapore";
+    return nominatimFetch(structuredUrl, signal)
+      .then(function (data) {
+        if (data && data.length) return data;
+        var freeUrl = "https://nominatim.openstreetmap.org/search?format=json&limit=6&countrycodes=sg&q="
+          + encodeURIComponent(code + " Singapore");
+        return nominatimFetch(freeUrl, signal);
+      })
+      .then(function (data) {
+        return (data || []).map(function (r) {
+          var split = splitDisplayName(r.display_name);
+          return { lat: parseFloat(r.lat), lon: parseFloat(r.lon), label: split.primary, primary: split.primary, secondary: split.secondary };
+        });
+      });
+  }
+
+  function resolveSGPostal(code, signal) {
+    return oneMapSearch(code, signal)
+      .then(function (items) {
+        if (items.length) return items;
+        return fallbackNominatimPostalItems(code, signal);
+      })
+      .catch(function (err) {
+        if (err && err.name === "AbortError") throw err;
+        return fallbackNominatimPostalItems(code, signal);
+      });
+  }
+
   /* ---------- live address suggestions ---------- */
   var suggestTimer = null;
   var suggestController = null;
@@ -866,36 +932,28 @@
     suggestController = new AbortController();
     var signal = suggestController.signal;
     var isPostal = isSGPostalCode(rawQuery);
-    var url;
-    if (isPostal) {
-      var code = rawQuery.length === 5 ? "0" + rawQuery : rawQuery;
-      url = "https://nominatim.openstreetmap.org/search?format=json&limit=6&postalcode="
-        + encodeURIComponent(code) + "&country=Singapore";
-    } else {
-      url = "https://nominatim.openstreetmap.org/search?format=json&limit=6&q=" + encodeURIComponent(rawQuery);
-    }
+
     var box = $("addressSuggestions");
     box.innerHTML = '<div class="suggestion-status">Searching…</div>';
     box.style.display = "block";
     $("addressInput").setAttribute("aria-expanded", "true");
 
-    nominatimFetch(url, signal)
-      .then(function (data) {
-        if (isPostal && (!data || !data.length)) {
-          var code2 = rawQuery.length === 5 ? "0" + rawQuery : rawQuery;
-          var freeUrl = "https://nominatim.openstreetmap.org/search?format=json&limit=6&countrycodes=sg&q="
-            + encodeURIComponent(code2 + " Singapore");
-          return nominatimFetch(freeUrl, signal);
-        }
-        return data;
-      })
-      .then(function (data) {
-        var items = (data || []).map(function (r) {
+    var resultPromise;
+    if (isPostal) {
+      var code = rawQuery.length === 5 ? "0" + rawQuery : rawQuery;
+      resultPromise = resolveSGPostal(code, signal);
+    } else {
+      var url = "https://nominatim.openstreetmap.org/search?format=json&limit=6&q=" + encodeURIComponent(rawQuery);
+      resultPromise = nominatimFetch(url, signal).then(function (data) {
+        return (data || []).map(function (r) {
           var split = splitDisplayName(r.display_name);
           return { lat: parseFloat(r.lat), lon: parseFloat(r.lon), label: split.primary, primary: split.primary, secondary: split.secondary };
         });
-        renderSuggestions(items);
-      })
+      });
+    }
+
+    resultPromise
+      .then(renderSuggestions)
       .catch(function (err) {
         if (err && err.name === "AbortError") return;
         box.innerHTML = '<div class="suggestion-status">Couldn’t load suggestions right now.</div>';
@@ -951,26 +1009,15 @@
     if (isSGPostalCode(raw)) {
       var code = raw.length === 5 ? "0" + raw : raw; // SG postal codes are always 6 digits
       showLocStatus("Looking up postal code " + code + "…", false);
-      var structuredUrl = "https://nominatim.openstreetmap.org/search?format=json&limit=1&postalcode="
-        + encodeURIComponent(code) + "&country=Singapore";
-      nominatimFetch(structuredUrl)
-        .then(function (data) {
-          if (data && data.length) return data;
-          // fall back to a free-text search biased to Singapore — not every
-          // address in OSM has a structured postcode tag
-          var freeUrl = "https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=sg&q="
-            + encodeURIComponent(code + " Singapore");
-          return nominatimFetch(freeUrl);
-        })
-        .then(function (data) {
-          if (!data || !data.length) {
+      resolveSGPostal(code)
+        .then(function (items) {
+          if (!items.length) {
             showLocStatus("Couldn't find postal code " + code + " — double-check it, or try typing the building/street name instead.", true);
             return;
           }
           hideLocStatus();
-          var r0 = data[0];
-          var label = "Singapore " + code;
-          setLocation(parseFloat(r0.lat), parseFloat(r0.lon), label);
+          var item = items[0];
+          setLocation(item.lat, item.lon, item.label);
         })
         .catch(function () {
           showLocStatus("Address lookup failed — check your connection and try again.", true);
