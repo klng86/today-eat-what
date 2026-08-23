@@ -663,14 +663,39 @@
   // Optional: paste a OneMap API access token here to merge in an extra
   // "Hawker Centres" layer — official government building locations from
   // OneMap's Themes API, on top of the regular OpenStreetMap search below.
-  // Get a free token at https://www.onemap.gov.sg/apidocs/ (register, then
-  // POST your email+password to /api/auth/post/getToken). OneMap tokens
-  // expire after ~3 days and this is a static site with no backend to
-  // refresh one automatically, so you'll need to paste in a fresh token
-  // occasionally to keep this layer active — when this is blank or the
-  // token has expired, the app just quietly skips it and searches
-  // OpenStreetMap alone, exactly as before. Nothing else breaks.
-  var ONEMAP_ACCESS_TOKEN = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoyMjA3MSwiZm9yZXZlciI6ZmFsc2UsImlzcyI6Ik9uZU1hcCIsImlhdCI6MTc4NzQ3ODg0NCwibmJmIjoxNzg3NDc4ODQ0LCJleHAiOjE3ODc3MzgwNDQsImp0aSI6IjdhNTJmNTZiLWYzZWQtNDk1ZS1hZGI1LWE3MDlmZTg5ZTFhYiJ9.OUI5wxH9-9-YMr0sQ-gaxB8qX6L0lsPXBo3rnYL9wcdGJrsnWteNV8fT4zlK5lyqQsyYbifH8C9Sj1H9-HdPho6pUq3KPTJ9-z7Qd2sntUlziQMYL7lEXH5_phNDfTwX0Zpt3Djsa-z8IRLdqNI8a3o21oGzqEJU9SZQajrs7VxBY7Q6POYyLE7BA9SznmvcKgaGbQvv_q3gmK5bTUQ3llkXU0ScImsDCXRYrI2m7ehqXt8b1zH8YBuVa2_Qrsfz1TrrhybvRuhPZlZAJAxl0pmlQmKrA3_Uf5n2rn4BwyB-slMqdqZLbl4t3FVELRs9jKnLFnj2MnGkLZ-ZobONBQ";
+  // The access token is fetched at runtime from onemap-token.json (a small,
+  // non-secret file living next to this page) rather than hardcoded here.
+  // A scheduled GitHub Actions workflow (.github/workflows/refresh-onemap-token.yml)
+  // regenerates that file automatically using an email+password stored as
+  // GitHub Actions secrets — never in this file or the page source. If that
+  // file is missing, unreachable, or holds an expired token, this layer just
+  // quietly skips itself and the app searches OpenStreetMap alone, exactly
+  // as before. Nothing else breaks.
+  var ONEMAP_TOKEN_URL = "onemap-token.json";
+  var ONEMAP_ACCESS_TOKEN = null;
+  var onemapTokenPromise = null;
+
+  function loadOneMapToken() {
+    if (onemapTokenPromise) return onemapTokenPromise;
+    onemapTokenPromise = fetch(ONEMAP_TOKEN_URL, { cache: "no-store" })
+      .then(function (r) {
+        if (!r.ok) throw new Error("onemap-token.json unavailable");
+        return r.json();
+      })
+      .then(function (data) {
+        if (!data || !data.access_token) throw new Error("onemap-token.json missing access_token");
+        if (data.expiry_timestamp && Date.now() / 1000 > Number(data.expiry_timestamp)) {
+          throw new Error("onemap token expired");
+        }
+        ONEMAP_ACCESS_TOKEN = data.access_token;
+        return ONEMAP_ACCESS_TOKEN;
+      })
+      .catch(function () {
+        ONEMAP_ACCESS_TOKEN = null;
+        return null;
+      });
+    return onemapTokenPromise;
+  }
 
   /* ---------- state ---------- */
   var state = {
@@ -1331,24 +1356,26 @@
   }
 
   function discoverHawkerThemeQueryName() {
-    if (!ONEMAP_ACCESS_TOKEN) return Promise.resolve(null);
     if (hawkerThemeQueryName) return Promise.resolve(hawkerThemeQueryName);
     if (hawkerThemeDiscoveryFailed) return Promise.resolve(null);
 
-    return fetch("https://www.onemap.gov.sg/api/public/themesvc/getAllThemesInfo?moreInfo=Y", {
-      headers: oneMapAuthHeaders()
-    }).then(function (r) {
-      if (!r.ok) throw new Error("getAllThemesInfo bad status " + r.status);
-      return r.json();
-    }).then(function (data) {
-      var themes = (data && data.Theme_Names) || [];
-      var match = themes.find(function (t) { return /hawker/i.test(t.THEMENAME || ""); });
-      if (!match) throw new Error("no hawker theme found");
-      hawkerThemeQueryName = match.QUERYNAME;
-      return hawkerThemeQueryName;
-    }).catch(function () {
-      hawkerThemeDiscoveryFailed = true;
-      return null;
+    return loadOneMapToken().then(function (token) {
+      if (!token) { hawkerThemeDiscoveryFailed = true; return null; }
+      return fetch("https://www.onemap.gov.sg/api/public/themesvc/getAllThemesInfo?moreInfo=Y", {
+        headers: oneMapAuthHeaders()
+      }).then(function (r) {
+        if (!r.ok) throw new Error("getAllThemesInfo bad status " + r.status);
+        return r.json();
+      }).then(function (data) {
+        var themes = (data && data.Theme_Names) || [];
+        var match = themes.find(function (t) { return /hawker/i.test(t.THEMENAME || ""); });
+        if (!match) throw new Error("no hawker theme found");
+        hawkerThemeQueryName = match.QUERYNAME;
+        return hawkerThemeQueryName;
+      }).catch(function () {
+        hawkerThemeDiscoveryFailed = true;
+        return null;
+      });
     });
   }
 

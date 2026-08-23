@@ -17,9 +17,20 @@ No backend, no build step, no API keys required, no cost. It's one HTML file tha
 
 ### Optional: OneMap Hawker Centres layer
 
-OneMap (Singapore's government geocoder) doesn't offer a general restaurant/cafe search — only curated datasets, one of which is official **Hawker Centre** building locations. If you want that layer merged into your results (on top of the regular OpenStreetMap search, which stays the source for everything else), paste a OneMap API access token into the `ONEMAP_ACCESS_TOKEN` constant near the top of the `<script>` block in `index.html`.
+OneMap (Singapore's government geocoder) doesn't offer a general restaurant/cafe search — only curated datasets, one of which is official **Hawker Centre** building locations. If you want that layer merged into your results (on top of the regular OpenStreetMap search, which stays the source for everything else), the app reads an access token at runtime from `onemap-token.json`, a small file that sits next to `index.html`. When that file is missing, unreachable, or holds an expired token, the app just quietly searches OpenStreetMap alone — nothing else breaks either way.
 
-To get a token: register a free account at [onemap.gov.sg](https://www.onemap.gov.sg/apidocs/) and `POST` your email + password to `/api/auth/post/getToken`. **Tokens expire after about 3 days.** Since this is a static site with no backend to auto-refresh one, you'll need to paste in a fresh token every few days to keep this layer active. When the field is left blank, or a token has expired, the app just quietly searches OpenStreetMap alone — nothing breaks either way.
+OneMap access tokens expire after about 3 days, so `onemap-token.json` is kept fresh automatically by a scheduled GitHub Actions workflow (`.github/workflows/refresh-onemap-token.yml`) that runs once a day, well inside that window. To turn this on:
+
+1. Register a free account at [onemap.gov.sg](https://www.onemap.gov.sg/apidocs/authentication) if you don't already have one.
+2. In your GitHub repo, go to **Settings → Secrets and variables → Actions → New repository secret** and add two secrets:
+   - `ONEMAP_EMAIL` — the email for your OneMap account
+   - `ONEMAP_PASSWORD` — that account's password
+
+   Type these in yourself, directly into GitHub's own secret form — GitHub encrypts them and no workflow log or file in this repo ever prints them back out. Only the short-lived access token the OneMap API hands back gets written to `onemap-token.json`; your email and password never do.
+3. Still under **Settings → Actions → General → Workflow permissions**, make sure **Read and write permissions** is selected — the workflow needs this to commit the refreshed token back to the repo.
+4. Go to the **Actions** tab, open **Refresh OneMap token** in the sidebar, and click **Run workflow** once to get the first token immediately (otherwise it'll just wait for its next daily 03:00 UTC run).
+
+From then on it renews itself automatically — nothing to paste in manually, ever again. If the two secrets are ever removed or the workflow is disabled, the layer simply goes quiet next time the token in `onemap-token.json` expires; everything else keeps working exactly as before.
 
 ### Data limitations (it's worth knowing)
 
