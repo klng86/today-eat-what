@@ -6,8 +6,8 @@ Can't decide where to eat? This is a single-page web app that finds real food sp
 
 ## How it works
 
-- **Location** — either "Use my current location" (browser geolocation) or type an address, which is geocoded via [Nominatim](https://nominatim.org/) (OpenStreetMap's free geocoder).
-- **Nearby food** — queried live from the [Overpass API](https://overpass-api.de/) (OpenStreetMap data): restaurants, cafés, fast food, hawker centres/food courts, pubs, bars, ice cream, bakeries.
+- **Location** — either "Use my current location" (browser geolocation) or type an address, which is geocoded via [Nominatim](https://nominatim.org/) (OpenStreetMap's free geocoder), with [OneMap](https://www.onemap.gov.sg/) as the primary, more accurate source for Singapore postal codes.
+- **Nearby food** — queried live from the [Overpass API](https://overpass-api.de/) (OpenStreetMap data): restaurants, cafés, fast food, hawker centres/food courts, pubs, bars, ice cream, bakeries, confectioneries, delis, pastry shops, and canteens — matched as points, buildings, or larger complexes. If a search comes back thin (common in less-mapped residential areas), the app automatically widens the radius up to two tiers before giving up, and tells you when it did.
 - **Filters** — cuisine (auto-built from what's actually nearby), a tighter "within" distance, price level, and dietary needs (halal / vegetarian / vegan).
 - **Wheel** — a canvas-drawn roulette wheel picks a fair random winner from your filtered list (capped at 24 spots on screen at once; "Show a different 24" reshuffles if you have more matches).
 - **Result** — name, distance, walking time, and a one-tap link to open it in Google Maps.

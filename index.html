@@ -519,8 +519,8 @@
             <label class="field-label" for="radiusSlider" style="margin:0;">Search radius</label>
             <span class="radius-value num" id="radiusValue">500 m</span>
           </div>
-          <input type="range" id="radiusSlider" min="0" max="6" step="1" value="1" />
-          <div class="radius-scale"><span>300 m</span><span>3 km</span></div>
+          <input type="range" id="radiusSlider" min="0" max="7" step="1" value="1" />
+          <div class="radius-scale"><span>300 m</span><span>5 km</span></div>
           <p class="hint" id="walkHint" style="margin-top:10px;"></p>
         </div>
 
@@ -574,6 +574,7 @@
         </div>
       </div>
 
+      <p class="hint" id="widenNote" style="display:none; margin:0 2px;"></p>
       <div class="card match-bar">
         <div class="match-count" id="matchCount">0 <small>spots match</small></div>
         <button class="btn-text" id="btnClearFilters" type="button">Clear all</button>
@@ -635,15 +636,23 @@
   "use strict";
 
   /* ---------- constants ---------- */
-  var RADIUS_STEPS = [300, 500, 750, 1000, 1500, 2000, 3000];
+  var RADIUS_STEPS = [300, 500, 750, 1000, 1500, 2000, 3000, 5000];
   var OVERPASS_ENDPOINTS = [
     "https://overpass-api.de/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",
     "https://overpass.openstreetmap.ru/api/interpreter"
   ];
-  var AMENITY_TYPES = ["restaurant", "cafe", "fast_food", "food_court", "pub", "bar", "ice_cream", "biergarten"];
+  var AMENITY_TYPES = ["restaurant", "cafe", "fast_food", "food_court", "pub", "bar", "ice_cream", "biergarten", "canteen"];
+  var SHOP_FOOD_TYPES = ["bakery", "confectionery", "deli", "pastry"];
   var WHEEL_COLORS = ["#D8391F", "#C97A16", "#146B5D", "#A82C17", "#E8A23C", "#1F7A6C"];
   var WHEEL_CAP = 24;
+  // If a search comes back thin, automatically widen the radius rather than
+  // making the user notice and adjust the slider themselves — many
+  // residential / suburban areas are sparsely mapped on OpenStreetMap at
+  // 300-500m, so a single tight-radius search often under-represents what's
+  // actually nearby.
+  var MIN_RESULTS_BEFORE_AUTO_WIDEN = 6;
+  var MAX_AUTO_WIDEN_STEPS = 2;
 
   /* ---------- state ---------- */
   var state = {
@@ -1089,10 +1098,14 @@
 
   function buildOverpassQuery(lat, lon, radius) {
     var amenityRegex = "^(" + AMENITY_TYPES.join("|") + ")$";
+    var shopRegex = "^(" + SHOP_FOOD_TYPES.join("|") + ")$";
+    // "nwr" (node/way/relation combined) catches food spots mapped as
+    // building outlines or multipolygons, not just point nodes — some larger
+    // food courts and mall-anchored places are mapped that way, and the old
+    // node+way-only query silently missed them.
     return "[out:json][timeout:25];(" +
-      'node["amenity"~"' + amenityRegex + '"](around:' + radius + "," + lat + "," + lon + ");" +
-      'way["amenity"~"' + amenityRegex + '"](around:' + radius + "," + lat + "," + lon + ");" +
-      'node["shop"="bakery"](around:' + radius + "," + lat + "," + lon + ");" +
+      'nwr["amenity"~"' + amenityRegex + '"](around:' + radius + "," + lat + "," + lon + ");" +
+      'nwr["shop"~"' + shopRegex + '"](around:' + radius + "," + lat + "," + lon + ");" +
       ");out center tags;";
   }
 
@@ -1143,20 +1156,55 @@
 
   function fetchNearbyFood() {
     if (!state.loc) { goToStep(1); return; }
-    var radius = RADIUS_STEPS[state.radiusIdx];
-    var query = buildOverpassQuery(state.loc.lat, state.loc.lon, radius);
     $("btnFetch").disabled = true;
-    showFetchStatus("Asking OpenStreetMap what's around you…", false);
+    $("widenNote").style.display = "none";
+    attemptFetch(state.radiusIdx, state.radiusIdx, 0);
+  }
+
+  // Fetches at radiusIdx; if the result count is thin, automatically steps
+  // out to the next radius tier (up to MAX_AUTO_WIDEN_STEPS times) instead of
+  // surfacing a sparse list and leaving it to the user to notice and widen
+  // the slider themselves. startIdx is kept around purely to report "we
+  // widened from X to Y" once fetching settles.
+  function attemptFetch(radiusIdx, startIdx, widenCount) {
+    var radius = RADIUS_STEPS[radiusIdx];
+    var query = buildOverpassQuery(state.loc.lat, state.loc.lon, radius);
+    showFetchStatus(
+      widenCount > 0
+        ? "Not many spots yet — widening the search to " + fmtDist(radius) + "…"
+        : "Asking OpenStreetMap what's around you…",
+      false
+    );
 
     tryOverpass(query)
       .then(function (data) {
-        hideFetchStatus();
-        $("btnFetch").disabled = false;
         var places = processOverpassResults(data, state.loc);
-        if (!places.length) {
-          showFetchStatus("No named food spots found in this radius — try a wider radius.", true);
+        var canWiden = radiusIdx < RADIUS_STEPS.length - 1 && widenCount < MAX_AUTO_WIDEN_STEPS;
+        if (places.length < MIN_RESULTS_BEFORE_AUTO_WIDEN && canWiden) {
+          attemptFetch(radiusIdx + 1, startIdx, widenCount + 1);
           return;
         }
+
+        hideFetchStatus();
+        $("btnFetch").disabled = false;
+
+        if (!places.length) {
+          showFetchStatus("No named food spots found even after widening the search — try a different address, or check back later as OpenStreetMap gets updated.", true);
+          return;
+        }
+
+        state.radiusIdx = radiusIdx;
+        updateRadiusLabel();
+        $("radiusSlider").value = radiusIdx;
+
+        var widenNote = $("widenNote");
+        if (radiusIdx !== startIdx) {
+          widenNote.textContent = "Only a few spots within " + fmtDist(RADIUS_STEPS[startIdx]) + ", so we widened the search to " + fmtDist(radius) + ".";
+          widenNote.style.display = "";
+        } else {
+          widenNote.style.display = "none";
+        }
+
         state.places = places;
         state.subRadius = radius;
         $("subRadiusSlider").max = radius;
@@ -1201,11 +1249,14 @@
   }
 
   function categoryLabel(tags) {
-    if (tags.shop === "bakery") return "Bakery";
+    var shopMap = {
+      bakery: "Bakery", confectionery: "Confectionery", deli: "Deli", pastry: "Pastry shop"
+    };
+    if (tags.shop && shopMap[tags.shop]) return shopMap[tags.shop];
     var map = {
       restaurant: "Restaurant", cafe: "Café", fast_food: "Fast food",
       food_court: "Food court / hawker", pub: "Pub", bar: "Bar",
-      ice_cream: "Ice cream", biergarten: "Beer garden"
+      ice_cream: "Ice cream", biergarten: "Beer garden", canteen: "Canteen"
     };
     return map[tags.amenity] || "Eatery";
   }
