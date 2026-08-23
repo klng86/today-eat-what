@@ -1,0 +1,88 @@
+name: Refresh OneMap token
+
+# Keeps onemap-token.json (used by the live app's optional Hawker Centres
+# layer) filled with a valid OneMap access token. OneMap tokens expire after
+# ~3 days, so this runs once a day — well inside that window, so a single
+# missed/failed run still leaves plenty of buffer before the old token dies.
+#
+# Requires two repository secrets (Settings -> Secrets and variables ->
+# Actions -> New repository secret), set by the repo owner directly in
+# GitHub's UI — never pasted into chat, code, or logs:
+#   ONEMAP_EMAIL    - the email for your onemap.gov.sg account
+#   ONEMAP_PASSWORD - that account's password
+#
+# The email/password never leave this job and are never written to any file
+# or log — only the resulting short-lived access token (from OneMap's own
+# /getToken response) is committed, to onemap-token.json.
+
+on:
+  schedule:
+    - cron: '0 3 * * *' # 03:00 UTC daily
+  workflow_dispatch: {} # lets you trigger a run manually from the Actions tab
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-onemap-token
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Request a new OneMap token
+        env:
+          ONEMAP_EMAIL: ${{ secrets.ONEMAP_EMAIL }}
+          ONEMAP_PASSWORD: ${{ secrets.ONEMAP_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${ONEMAP_EMAIL:-}" ] || [ -z "${ONEMAP_PASSWORD:-}" ]; then
+            echo "ONEMAP_EMAIL and/or ONEMAP_PASSWORD repository secrets are not set. See this workflow file for setup instructions." >&2
+            exit 1
+          fi
+
+          # Body goes into a local file so it's never present on the command
+          # line or in any log line.
+          jq -n --arg email "$ONEMAP_EMAIL" --arg password "$ONEMAP_PASSWORD" \
+            '{email: $email, password: $password}' > /tmp/onemap-auth-body.json
+
+          http_status=$(curl -s -o /tmp/onemap-auth-response.json -w '%{http_code}' \
+            -X POST "https://www.onemap.gov.sg/api/auth/post/getToken" \
+            -H "Content-Type: application/json" \
+            --data @/tmp/onemap-auth-body.json)
+
+          rm -f /tmp/onemap-auth-body.json
+
+          if [ "$http_status" != "200" ]; then
+            echo "OneMap getToken request failed with HTTP $http_status. (Response body withheld — it may echo the request.)" >&2
+            exit 1
+          fi
+
+          if ! jq -e '.access_token and .expiry_timestamp' /tmp/onemap-auth-response.json > /dev/null; then
+            echo "OneMap getToken response did not contain the expected fields." >&2
+            exit 1
+          fi
+
+          jq --arg refreshed_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{access_token: .access_token, expiry_timestamp: .expiry_timestamp, refreshed_at: $refreshed_at, note: "Auto-refreshed by .github/workflows/refresh-onemap-token.yml — do not edit by hand, it will be overwritten."}' \
+            /tmp/onemap-auth-response.json > onemap-token.json
+
+          rm -f /tmp/onemap-auth-response.json
+
+      - name: Commit updated token, if it changed
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- onemap-token.json; then
+            echo "Token unchanged, nothing to commit."
+            exit 0
+          fi
+          git add onemap-token.json
+          git commit -m "Auto-refresh OneMap access token"
+          git push
