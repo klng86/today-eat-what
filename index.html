@@ -856,12 +856,12 @@
       ");out center tags;";
   }
 
-  function tryOverpass(endpointIdx, query) {
-    if (endpointIdx >= OVERPASS_ENDPOINTS.length) {
-      return Promise.reject(new Error("all endpoints failed"));
+  function tryOverpassPass(endpoints, idx, query) {
+    if (idx >= endpoints.length) {
+      return Promise.reject(new Error("all endpoints failed this pass"));
     }
     var controller = new AbortController();
-    var timeoutId = setTimeout(function () { controller.abort(); }, 22000);
+    var timeoutId = setTimeout(function () { controller.abort(); }, 15000);
     // Use URLSearchParams so the browser sends a proper
     // application/x-www-form-urlencoded request — Overpass's /api/interpreter
     // only reads a "data" field when the body is form-encoded; a plain string
@@ -869,7 +869,7 @@
     // query itself (making "data=..." an invalid query on every mirror).
     var params = new URLSearchParams();
     params.set("data", query);
-    return fetch(OVERPASS_ENDPOINTS[endpointIdx], {
+    return fetch(endpoints[idx], {
       method: "POST",
       body: params,
       signal: controller.signal
@@ -877,9 +877,27 @@
       clearTimeout(timeoutId);
       if (!r.ok) throw new Error("bad status " + r.status);
       return r.json();
-    }).catch(function (err) {
+    }).catch(function () {
       clearTimeout(timeoutId);
-      return tryOverpass(endpointIdx + 1, query);
+      return tryOverpassPass(endpoints, idx + 1, query);
+    });
+  }
+
+  function wait(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+
+  // The free OSM mirrors occasionally hiccup (busy, brief 5xx/timeout) even
+  // though the service is generally fine, so shuffle the mirror order and
+  // give it one extra full pass before treating it as a real failure.
+  function tryOverpass(query, passesLeft) {
+    if (passesLeft == null) passesLeft = 2;
+    var endpoints = shuffle(OVERPASS_ENDPOINTS);
+    return tryOverpassPass(endpoints, 0, query).catch(function (err) {
+      if (passesLeft > 1) {
+        return wait(1200).then(function () { return tryOverpass(query, passesLeft - 1); });
+      }
+      throw err;
     });
   }
 
@@ -890,7 +908,7 @@
     $("btnFetch").disabled = true;
     showFetchStatus("Asking OpenStreetMap what's around you…", false);
 
-    tryOverpass(0, query)
+    tryOverpass(query)
       .then(function (data) {
         hideFetchStatus();
         $("btnFetch").disabled = false;
@@ -910,7 +928,7 @@
       })
       .catch(function () {
         $("btnFetch").disabled = false;
-        showFetchStatus("Couldn't reach OpenStreetMap right now — check your connection and try again.", true);
+        showFetchStatus("OpenStreetMap's free servers didn't respond — this happens occasionally when they're busy. Wait a moment and tap “Find food nearby” again.", true);
       });
   }
 
