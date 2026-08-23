@@ -1,0 +1,1255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Today Eat What</title>
+<meta name="description" content="Can't decide where to eat? Find nearby food and let the wheel pick for you." />
+<meta name="theme-color" content="#1B1420" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #FBF0EA;
+    --surface: #FFFFFF;
+    --surface-2: #FFF8F3;
+    --ink: #241726;
+    --ink-soft: #6B5C6E;
+    --line: rgba(36,23,38,0.14);
+    --chili: #D8391F;
+    --chili-ink: #A82C17;
+    --turmeric: #C97A16;
+    --turmeric-soft: #F3C878;
+    --teal: #146B5D;
+    --teal-soft: #BFE6DD;
+    --shadow: 0 10px 30px -12px rgba(36,23,38,0.28);
+    --radius-lg: 26px;
+    --radius-md: 16px;
+    --radius-sm: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1B1420;
+      --surface: #241B2C;
+      --surface-2: #2C2233;
+      --ink: #F6EEE6;
+      --ink-soft: #C7B9CB;
+      --line: rgba(246,238,230,0.16);
+      --chili: #FF6A4D;
+      --chili-ink: #FF8A6E;
+      --turmeric: #FFC55C;
+      --turmeric-soft: #4A3A22;
+      --teal: #4FD9C0;
+      --teal-soft: #1D3E39;
+      --shadow: 0 14px 34px -12px rgba(0,0,0,0.55);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1B1420;
+    --surface: #241B2C;
+    --surface-2: #2C2233;
+    --ink: #F6EEE6;
+    --ink-soft: #C7B9CB;
+    --line: rgba(246,238,230,0.16);
+    --chili: #FF6A4D;
+    --chili-ink: #FF8A6E;
+    --turmeric: #FFC55C;
+    --turmeric-soft: #4A3A22;
+    --teal: #4FD9C0;
+    --teal-soft: #1D3E39;
+    --shadow: 0 14px 34px -12px rgba(0,0,0,0.55);
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Manrope', system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, .display {
+    font-family: 'Baloo 2', system-ui, sans-serif;
+    font-weight: 700;
+    text-wrap: balance;
+    margin: 0;
+  }
+  .mono, .num {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  button { font-family: inherit; }
+  a { color: inherit; }
+
+  .wrap {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 18px 18px 48px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Header */
+  .stall-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 4px 2px 20px;
+  }
+  .stall-title {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .stall-title h1 {
+    font-size: clamp(26px, 7vw, 32px);
+    letter-spacing: -0.01em;
+  }
+  .stall-title h1 span { color: var(--chili); }
+  .step-dots {
+    display: flex;
+    gap: 6px;
+  }
+  .step-dots i {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--line);
+    display: block;
+  }
+  .step-dots i.active { background: var(--chili); width: 18px; border-radius: 4px; transition: all .25s ease; }
+  .step-dots i.done { background: var(--turmeric); }
+
+  .theme-toggle {
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--ink-soft);
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    font-size: 15px;
+    flex: none;
+  }
+
+  main { flex: 1; display: flex; flex-direction: column; }
+
+  .screen { display: none; flex-direction: column; gap: 18px; animation: rise .35s ease both; }
+  .screen.active { display: flex; }
+  @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    .screen { animation: none; }
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    padding: 22px;
+    box-shadow: var(--shadow);
+  }
+
+  .eyebrow {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--teal);
+    margin-bottom: 6px;
+  }
+  .lede { color: var(--ink-soft); font-size: 15px; line-height: 1.5; margin-top: 6px; }
+
+  .btn {
+    appearance: none;
+    border: none;
+    border-radius: 999px;
+    padding: 15px 22px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    transition: transform .12s ease, filter .12s ease;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary { background: var(--chili); color: #FFF7F2; }
+  .btn-primary:hover { filter: brightness(1.06); }
+  .btn-primary:disabled { background: var(--line); color: var(--ink-soft); cursor: not-allowed; }
+  .btn-primary:disabled:active { transform: none; }
+  .btn-ghost {
+    background: transparent;
+    color: var(--ink);
+    border: 1.5px solid var(--line);
+  }
+  .btn-text {
+    background: none; border: none; color: var(--teal); font-weight: 700;
+    font-size: 14px; cursor: pointer; padding: 8px; width: auto;
+  }
+  .btn-row { display: flex; gap: 10px; }
+  .btn-row .btn { width: auto; flex: 1; }
+
+  label.field-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ink-soft);
+    margin-bottom: 8px;
+  }
+  input[type="text"] {
+    width: 100%;
+    padding: 14px 16px;
+    border-radius: var(--radius-md);
+    border: 1.5px solid var(--line);
+    background: var(--surface-2);
+    color: var(--ink);
+    font-size: 16px;
+    font-family: inherit;
+  }
+  input[type="text"]:focus, .btn:focus-visible, .chip:focus-visible, .theme-toggle:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: 2px;
+  }
+
+  .divider-or {
+    display: flex; align-items: center; gap: 12px;
+    color: var(--ink-soft); font-size: 12px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  .divider-or::before, .divider-or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+  details.advanced { margin-top: 4px; }
+  details.advanced summary {
+    cursor: pointer; font-size: 13px; font-weight: 700; color: var(--ink-soft);
+    list-style: none;
+  }
+  details.advanced summary::-webkit-details-marker { display: none; }
+  details.advanced .adv-body { display: flex; gap: 8px; margin-top: 10px; }
+  details.advanced .adv-body input { flex: 1; }
+
+  .status-line {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 14px; color: var(--ink-soft);
+    padding: 12px 4px;
+  }
+  .status-line.error { color: var(--chili-ink); }
+  .spinner-dot {
+    width: 16px; height: 16px; border-radius: 50%;
+    border: 2.5px solid var(--line);
+    border-top-color: var(--chili);
+    animation: spin 0.8s linear infinite;
+    flex: none;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .location-chip {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--teal-soft);
+    color: var(--teal);
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .location-chip .change-btn {
+    margin-left: auto; background: none; border: none; color: var(--teal);
+    font-weight: 800; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;
+    cursor: pointer; padding: 4px;
+  }
+
+  /* Radius slider */
+  .radius-row { display: flex; align-items: baseline; justify-content: space-between; }
+  .radius-value { font-weight: 800; color: var(--chili); font-size: 15px; }
+  input[type="range"] {
+    width: 100%;
+    -webkit-appearance: none;
+    height: 6px;
+    border-radius: 4px;
+    background: var(--line);
+    margin: 14px 0 4px;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 24px; height: 24px; border-radius: 50%;
+    background: var(--chili);
+    border: 3px solid var(--surface);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+    cursor: pointer;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 24px; height: 24px; border-radius: 50%;
+    background: var(--chili);
+    border: 3px solid var(--surface);
+    cursor: pointer;
+  }
+  .radius-scale { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-soft); }
+
+  /* Filters */
+  .filter-group { display: flex; flex-direction: column; gap: 10px; }
+  .filter-group h3 {
+    font-family: 'Manrope', sans-serif; font-size: 12px; font-weight: 800;
+    text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft);
+  }
+  .chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    border: 1.5px solid var(--line);
+    background: var(--surface-2);
+    color: var(--ink);
+    border-radius: 999px;
+    padding: 9px 15px;
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .chip .n { color: var(--ink-soft); font-weight: 500; }
+  .chip[aria-pressed="true"] {
+    background: var(--chili);
+    border-color: var(--chili);
+    color: #FFF7F2;
+  }
+  .chip[aria-pressed="true"] .n { color: rgba(255,247,242,0.75); }
+  .hint { font-size: 12.5px; color: var(--ink-soft); line-height: 1.45; }
+
+  .match-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--surface-2);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+  }
+  .match-count { font-family: 'Baloo 2', sans-serif; font-size: 22px; color: var(--chili); }
+  .match-count small { font-family: 'Manrope', sans-serif; font-size: 12px; color: var(--ink-soft); font-weight: 700; }
+
+  .preview-list { display: flex; flex-direction: column; gap: 8px; max-height: 260px; overflow-y: auto; padding-right: 2px; }
+  .preview-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    font-size: 14px;
+  }
+  .preview-item .dist { margin-left: auto; color: var(--ink-soft); font-size: 12px; }
+  .tag-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+
+  /* Wheel */
+  .wheel-stage { display: flex; flex-direction: column; align-items: center; gap: 20px; padding-top: 4px; }
+  .wheel-holder { position: relative; width: min(340px, 82vw); aspect-ratio: 1; }
+  .pointer {
+    position: absolute; top: -6px; left: 50%; transform: translateX(-50%);
+    width: 0; height: 0;
+    border-left: 13px solid transparent;
+    border-right: 13px solid transparent;
+    border-top: 22px solid var(--chili);
+    z-index: 3;
+    filter: drop-shadow(0 3px 4px rgba(0,0,0,0.25));
+  }
+  canvas#wheel { width: 100%; height: 100%; display: block; border-radius: 50%; box-shadow: var(--shadow); }
+  .wheel-hub {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    width: 20%; height: 20%; border-radius: 50%;
+    background: var(--surface);
+    border: 4px solid var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    z-index: 2;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  }
+  .spin-fab {
+    background: var(--chili);
+    color: #FFF7F2;
+    border: none;
+    border-radius: 999px;
+    padding: 18px 44px;
+    font-family: 'Baloo 2', sans-serif;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    box-shadow: 0 12px 24px -8px rgba(216,57,31,0.55);
+  }
+  .spin-fab:active { transform: scale(0.96); }
+  .spin-fab:disabled { background: var(--line); color: var(--ink-soft); box-shadow: none; cursor: not-allowed; }
+  .wheel-note { font-size: 12.5px; color: var(--ink-soft); text-align: center; }
+
+  /* Result */
+  .result-card { text-align: center; padding: 30px 24px; }
+  .result-kicker { color: var(--turmeric); font-weight: 800; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; }
+  .result-name { font-size: clamp(26px, 8vw, 34px); margin: 8px 0 10px; }
+  .result-meta { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 6px; }
+  .meta-pill {
+    background: var(--surface-2);
+    border-radius: 999px;
+    padding: 6px 13px;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--ink-soft);
+  }
+  .result-address { color: var(--ink-soft); font-size: 14px; margin: 10px 0 20px; }
+  .result-actions { display: flex; flex-direction: column; gap: 10px; }
+
+  footer.app-footer {
+    text-align: center; font-size: 12px; color: var(--ink-soft);
+    padding-top: 28px; opacity: 0.8;
+  }
+  footer.app-footer a { color: var(--teal); font-weight: 700; text-decoration: none; }
+
+  .visually-hidden {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0,0,0,0); white-space: nowrap;
+  }
+
+  @media (max-width: 360px) {
+    .wrap { padding: 14px 14px 40px; }
+    .card { padding: 18px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="stall-header">
+    <div class="stall-title">
+      <h1>Today Eat<span>?</span></h1>
+    </div>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <div class="step-dots" id="stepDots" aria-hidden="true">
+        <i data-step="1"></i><i data-step="2"></i><i data-step="3"></i><i data-step="4"></i>
+      </div>
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle color theme" title="Toggle theme">◐</button>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- STEP 1: LOCATION -->
+    <section class="screen active" id="screen-1" aria-labelledby="s1h">
+      <div class="card">
+        <div class="eyebrow">Step 1 · Where are you</div>
+        <h2 id="s1h" style="font-size:22px;">Let's find out what's nearby</h2>
+        <p class="lede">Share your location or type an address — we'll pull real food spots around you from OpenStreetMap.</p>
+
+        <div style="margin-top:18px; display:flex; flex-direction:column; gap:14px;">
+          <button class="btn btn-primary" id="btnGeolocate" type="button">📍 Use my current location</button>
+
+          <div class="divider-or">or</div>
+
+          <div>
+            <label class="field-label" for="addressInput">Type an address, place, or SG postal code</label>
+            <div style="display:flex; gap:8px;">
+              <input type="text" id="addressInput" placeholder="e.g. Tampines Mall, or 529510" autocomplete="off" inputmode="text" />
+              <button class="btn btn-ghost" id="btnGeocode" type="button" style="width:auto; padding:0 18px;">Find</button>
+            </div>
+          </div>
+
+          <details class="advanced">
+            <summary>Enter coordinates manually instead ▾</summary>
+            <div class="adv-body">
+              <input type="text" id="latInput" placeholder="Latitude, e.g. 1.3521" inputmode="decimal" />
+              <input type="text" id="lonInput" placeholder="Longitude, e.g. 103.8198" inputmode="decimal" />
+              <button class="btn btn-ghost" id="btnManualLoc" type="button" style="width:auto; padding:0 16px;">Set</button>
+            </div>
+          </details>
+
+          <div class="status-line" id="locStatus" style="display:none;"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- STEP 2: RADIUS + FETCH -->
+    <section class="screen" id="screen-2" aria-labelledby="s2h">
+      <div class="location-chip" id="locChip">
+        <span>📍</span>
+        <span id="locChipText" class="mono" style="font-size:13px;">—</span>
+        <button class="change-btn" id="btnChangeLoc" type="button">Change</button>
+      </div>
+
+      <div class="card">
+        <div class="eyebrow">Step 2 · Search radius</div>
+        <h2 id="s2h" style="font-size:22px;">How far will you go?</h2>
+
+        <div style="margin-top:18px;">
+          <div class="radius-row">
+            <label class="field-label" for="radiusSlider" style="margin:0;">Search radius</label>
+            <span class="radius-value num" id="radiusValue">500 m</span>
+          </div>
+          <input type="range" id="radiusSlider" min="0" max="6" step="1" value="1" />
+          <div class="radius-scale"><span>300 m</span><span>3 km</span></div>
+          <p class="hint" id="walkHint" style="margin-top:10px;"></p>
+        </div>
+
+        <button class="btn btn-primary" id="btnFetch" type="button" style="margin-top:20px;">🍜 Find food nearby</button>
+        <div class="status-line" id="fetchStatus" style="display:none;"></div>
+      </div>
+    </section>
+
+    <!-- STEP 3: FILTERS -->
+    <section class="screen" id="screen-3" aria-labelledby="s3h">
+      <div class="card">
+        <div class="eyebrow">Step 3 · Narrow it down</div>
+        <h2 id="s3h" style="font-size:22px;">Any preferences?</h2>
+        <p class="lede">Optional — leave everything unselected to keep all matches in play.</p>
+
+        <div style="display:flex; flex-direction:column; gap:20px; margin-top:20px;">
+          <div class="filter-group">
+            <h3>Within</h3>
+            <div class="radius-row">
+              <span></span>
+              <span class="radius-value num" id="subRadiusValue">500 m</span>
+            </div>
+            <input type="range" id="subRadiusSlider" min="50" max="3000" step="50" value="500" />
+          </div>
+
+          <div class="filter-group" id="cuisineGroup">
+            <h3>Cuisine</h3>
+            <div class="chip-row" id="cuisineChips"></div>
+          </div>
+
+          <div class="filter-group">
+            <h3>Dietary needs</h3>
+            <div class="chip-row" id="dietChips">
+              <button class="chip" type="button" data-diet="halal" aria-pressed="false">Halal</button>
+              <button class="chip" type="button" data-diet="vegetarian" aria-pressed="false">Vegetarian</button>
+              <button class="chip" type="button" data-diet="vegan" aria-pressed="false">Vegan</button>
+            </div>
+            <p class="hint">Based on OpenStreetMap tags only — many compatible spots may simply not be tagged yet, so this can under-count.</p>
+          </div>
+
+          <div class="filter-group" id="priceGroup">
+            <h3>Price level</h3>
+            <div class="chip-row" id="priceChips">
+              <button class="chip" type="button" data-price="budget" aria-pressed="false">$ Budget</button>
+              <button class="chip" type="button" data-price="mid" aria-pressed="false">$$ Mid</button>
+              <button class="chip" type="button" data-price="pricier" aria-pressed="false">$$$ Pricier</button>
+              <button class="chip" type="button" data-price="unlisted" aria-pressed="false">Not listed</button>
+            </div>
+            <p class="hint">Price data is sparse on OpenStreetMap — most spots will fall under "Not listed".</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card match-bar">
+        <div class="match-count" id="matchCount">0 <small>spots match</small></div>
+        <button class="btn-text" id="btnClearFilters" type="button">Clear all</button>
+      </div>
+
+      <div class="card" id="previewCard">
+        <div class="preview-list" id="previewList"></div>
+      </div>
+
+      <button class="btn btn-primary" id="btnSpinGo" type="button">🎡 Spin the wheel</button>
+    </section>
+
+    <!-- STEP 4: WHEEL -->
+    <section class="screen" id="screen-4" aria-labelledby="s4h">
+      <div class="card wheel-stage">
+        <div class="eyebrow">Step 4 · Decide!</div>
+        <h2 id="s4h" style="font-size:22px;">Give it a spin</h2>
+
+        <div class="wheel-holder">
+          <div class="pointer"></div>
+          <canvas id="wheel" width="600" height="600"></canvas>
+          <div class="wheel-hub">🍽️</div>
+        </div>
+
+        <button class="spin-fab" id="btnSpin" type="button">SPIN</button>
+        <p class="wheel-note" id="wheelNote"></p>
+        <button class="btn-text" id="btnReshuffle" type="button" style="display:none;">🔀 Show a different 24</button>
+        <button class="btn-text" id="btnBackToFilters">← Back to filters</button>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="app-footer">
+    Food data from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors.
+  </footer>
+</div>
+
+<!-- RESULT OVERLAY -->
+<div id="resultOverlay" style="display:none; position:fixed; inset:0; background:rgba(20,12,20,0.55); backdrop-filter: blur(2px); z-index:50; align-items:flex-end; justify-content:center;">
+  <div class="card result-card" style="width:100%; max-width:480px; border-radius:26px 26px 0 0; margin:0;">
+    <div class="result-kicker">The wheel has spoken</div>
+    <h2 class="result-name" id="resultName">—</h2>
+    <div class="result-meta" id="resultMeta"></div>
+    <div class="result-address" id="resultAddress"></div>
+    <div class="result-actions">
+      <a class="btn btn-primary" id="resultMapsLink" href="#" target="_blank" rel="noopener">🗺️ Open in Google Maps</a>
+      <div class="btn-row">
+        <button class="btn btn-ghost" id="btnSpinAgain" type="button">Spin again</button>
+        <button class="btn btn-ghost" id="btnNotFeelingIt" type="button">Not feeling it</button>
+      </div>
+      <button class="btn-text" id="btnCloseResult" type="button">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------- constants ---------- */
+  var RADIUS_STEPS = [300, 500, 750, 1000, 1500, 2000, 3000];
+  var OVERPASS_ENDPOINTS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass.openstreetmap.ru/api/interpreter"
+  ];
+  var AMENITY_TYPES = ["restaurant", "cafe", "fast_food", "food_court", "pub", "bar", "ice_cream", "biergarten"];
+  var WHEEL_COLORS = ["#D8391F", "#C97A16", "#146B5D", "#A82C17", "#E8A23C", "#1F7A6C"];
+  var WHEEL_CAP = 24;
+
+  /* ---------- state ---------- */
+  var state = {
+    loc: null,            // {lat, lon, label}
+    radiusIdx: 1,          // index into RADIUS_STEPS used for the fetch
+    places: [],            // raw fetched + distance-annotated places
+    cuisines: {},           // cuisine label -> count
+    activeCuisines: new Set(),
+    activeDiets: new Set(),
+    activePrices: new Set(),
+    subRadius: 500,
+    filtered: [],
+    wheelList: [],
+    rotation: 0,
+    spinning: false
+  };
+
+  /* ---------- helpers ---------- */
+  function $(id) { return document.getElementById(id); }
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  function toRad(d) { return d * Math.PI / 180; }
+  function haversine(lat1, lon1, lat2, lon2) {
+    var R = 6371000;
+    var dLat = toRad(lat2 - lat1);
+    var dLon = toRad(lon2 - lon1);
+    var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+  function fmtDist(m) {
+    if (m < 950) return Math.round(m / 10) * 10 + " m";
+    return (m / 1000).toFixed(1) + " km";
+  }
+  function fmtWalk(m) {
+    var mins = Math.max(1, Math.round(m / 80));
+    return "~" + mins + " min walk";
+  }
+  function titleCase(s) {
+    return s.replace(/_/g, " ").replace(/\w\S*/g, function (t) {
+      return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
+    });
+  }
+  function randomInt(n) {
+    if (window.crypto && window.crypto.getRandomValues) {
+      var arr = new Uint32Array(1);
+      window.crypto.getRandomValues(arr);
+      return arr[0] % n;
+    }
+    return Math.floor(Math.random() * n);
+  }
+  function shuffle(arr) {
+    var a = arr.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = randomInt(i + 1);
+      var t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+  function saveLocal(key, val) {
+    try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {}
+  }
+  function loadLocal(key) {
+    try { var v = localStorage.getItem(key); return v ? JSON.parse(v) : null; } catch (e) { return null; }
+  }
+
+  /* ---------- theme ---------- */
+  (function initTheme() {
+    var saved = loadLocal("tew_theme");
+    if (saved) document.documentElement.setAttribute("data-theme", saved);
+    $("themeToggle").addEventListener("click", function () {
+      var current = document.documentElement.getAttribute("data-theme");
+      var prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      var effectiveDark = current ? current === "dark" : prefersDark;
+      var next = effectiveDark ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", next);
+      saveLocal("tew_theme", next);
+    });
+  })();
+
+  /* ---------- step navigation ---------- */
+  function goToStep(n) {
+    for (var i = 1; i <= 4; i++) {
+      $("screen-" + i).classList.toggle("active", i === n);
+    }
+    var dots = $("stepDots").children;
+    for (var d = 0; d < dots.length; d++) {
+      var step = d + 1;
+      dots[d].classList.toggle("active", step === n);
+      dots[d].classList.toggle("done", step < n);
+    }
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  /* ---------- STEP 1: location ---------- */
+  function setLocation(lat, lon, label) {
+    state.loc = { lat: lat, lon: lon, label: label || (lat.toFixed(4) + ", " + lon.toFixed(4)) };
+    saveLocal("tew_last_loc", state.loc);
+    $("locChipText").textContent = state.loc.label;
+    goToStep(2);
+  }
+
+  function showLocStatus(msg, isError) {
+    var elm = $("locStatus");
+    elm.style.display = "flex";
+    elm.className = "status-line" + (isError ? " error" : "");
+    elm.innerHTML = isError ? "" : '<span class="spinner-dot"></span>';
+    elm.appendChild(document.createTextNode(msg));
+  }
+  function hideLocStatus() { $("locStatus").style.display = "none"; }
+
+  $("btnGeolocate").addEventListener("click", function () {
+    if (!navigator.geolocation) {
+      showLocStatus("Geolocation isn't available in this browser — try typing an address instead.", true);
+      return;
+    }
+    showLocStatus("Getting your location…", false);
+    navigator.geolocation.getCurrentPosition(
+      function (pos) {
+        hideLocStatus();
+        setLocation(pos.coords.latitude, pos.coords.longitude, "Your current location");
+      },
+      function (err) {
+        var msg = "Couldn't get your location.";
+        if (err.code === 1) msg = "Location permission denied — try typing an address below instead.";
+        else if (err.code === 3) msg = "Location timed out — try again, or type an address below.";
+        showLocStatus(msg, true);
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
+    );
+  });
+
+  $("btnGeocode").addEventListener("click", geocodeAddress);
+  $("addressInput").addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); geocodeAddress(); }
+  });
+
+  function isSGPostalCode(q) {
+    return /^\d{5,6}$/.test(q);
+  }
+  function nominatimFetch(url) {
+    return fetch(url, { headers: { "Accept": "application/json" } }).then(function (r) { return r.json(); });
+  }
+
+  function geocodeAddress() {
+    var raw = $("addressInput").value.trim();
+    if (!raw) return;
+
+    if (isSGPostalCode(raw)) {
+      var code = raw.length === 5 ? "0" + raw : raw; // SG postal codes are always 6 digits
+      showLocStatus("Looking up postal code " + code + "…", false);
+      var structuredUrl = "https://nominatim.openstreetmap.org/search?format=json&limit=1&postalcode="
+        + encodeURIComponent(code) + "&country=Singapore";
+      nominatimFetch(structuredUrl)
+        .then(function (data) {
+          if (data && data.length) return data;
+          // fall back to a free-text search biased to Singapore — not every
+          // address in OSM has a structured postcode tag
+          var freeUrl = "https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=sg&q="
+            + encodeURIComponent(code + " Singapore");
+          return nominatimFetch(freeUrl);
+        })
+        .then(function (data) {
+          if (!data || !data.length) {
+            showLocStatus("Couldn't find postal code " + code + " — double-check it, or try typing the building/street name instead.", true);
+            return;
+          }
+          hideLocStatus();
+          var r0 = data[0];
+          var label = "Singapore " + code;
+          setLocation(parseFloat(r0.lat), parseFloat(r0.lon), label);
+        })
+        .catch(function () {
+          showLocStatus("Address lookup failed — check your connection and try again.", true);
+        });
+      return;
+    }
+
+    showLocStatus("Looking up “" + raw + "”…", false);
+    var url = "https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + encodeURIComponent(raw);
+    nominatimFetch(url)
+      .then(function (data) {
+        if (!data || !data.length) {
+          showLocStatus("Couldn't find that place — try a more specific address, or a 6-digit SG postal code.", true);
+          return;
+        }
+        hideLocStatus();
+        var r0 = data[0];
+        var label = r0.display_name.split(",").slice(0, 2).join(",").trim();
+        setLocation(parseFloat(r0.lat), parseFloat(r0.lon), label);
+      })
+      .catch(function () {
+        showLocStatus("Address lookup failed — check your connection and try again.", true);
+      });
+  }
+
+  $("btnManualLoc").addEventListener("click", function () {
+    var lat = parseFloat($("latInput").value);
+    var lon = parseFloat($("lonInput").value);
+    if (isNaN(lat) || isNaN(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+      showLocStatus("Enter valid coordinates, e.g. 1.3521, 103.8198.", true);
+      return;
+    }
+    hideLocStatus();
+    setLocation(lat, lon, "Custom coordinates");
+  });
+
+  $("btnChangeLoc").addEventListener("click", function () { goToStep(1); });
+
+  /* restore last known location as a convenience prefill */
+  (function restoreLoc() {
+    var last = loadLocal("tew_last_loc");
+    if (last && typeof last.lat === "number") {
+      state.loc = last;
+    }
+  })();
+
+  /* ---------- STEP 2: radius + fetch ---------- */
+  function updateRadiusLabel() {
+    var m = RADIUS_STEPS[state.radiusIdx];
+    $("radiusValue").textContent = m < 1000 ? m + " m" : (m / 1000) + " km";
+    $("walkHint").textContent = "About " + fmtWalk(m) + " to the edge of this radius.";
+  }
+  $("radiusSlider").addEventListener("input", function (e) {
+    state.radiusIdx = parseInt(e.target.value, 10);
+    updateRadiusLabel();
+  });
+  updateRadiusLabel();
+
+  function showFetchStatus(msg, isError) {
+    var elm = $("fetchStatus");
+    elm.style.display = "flex";
+    elm.className = "status-line" + (isError ? " error" : "");
+    elm.innerHTML = isError ? "" : '<span class="spinner-dot"></span>';
+    elm.appendChild(document.createTextNode(msg));
+  }
+  function hideFetchStatus() { $("fetchStatus").style.display = "none"; }
+
+  $("btnFetch").addEventListener("click", fetchNearbyFood);
+
+  function buildOverpassQuery(lat, lon, radius) {
+    var amenityRegex = "^(" + AMENITY_TYPES.join("|") + ")$";
+    return "[out:json][timeout:25];(" +
+      'node["amenity"~"' + amenityRegex + '"](around:' + radius + "," + lat + "," + lon + ");" +
+      'way["amenity"~"' + amenityRegex + '"](around:' + radius + "," + lat + "," + lon + ");" +
+      'node["shop"="bakery"](around:' + radius + "," + lat + "," + lon + ");" +
+      ");out center tags;";
+  }
+
+  function tryOverpass(endpointIdx, query) {
+    if (endpointIdx >= OVERPASS_ENDPOINTS.length) {
+      return Promise.reject(new Error("all endpoints failed"));
+    }
+    var controller = new AbortController();
+    var timeoutId = setTimeout(function () { controller.abort(); }, 22000);
+    // Use URLSearchParams so the browser sends a proper
+    // application/x-www-form-urlencoded request — Overpass's /api/interpreter
+    // only reads a "data" field when the body is form-encoded; a plain string
+    // body defaults to text/plain, which Overpass instead treats as the raw
+    // query itself (making "data=..." an invalid query on every mirror).
+    var params = new URLSearchParams();
+    params.set("data", query);
+    return fetch(OVERPASS_ENDPOINTS[endpointIdx], {
+      method: "POST",
+      body: params,
+      signal: controller.signal
+    }).then(function (r) {
+      clearTimeout(timeoutId);
+      if (!r.ok) throw new Error("bad status " + r.status);
+      return r.json();
+    }).catch(function (err) {
+      clearTimeout(timeoutId);
+      return tryOverpass(endpointIdx + 1, query);
+    });
+  }
+
+  function fetchNearbyFood() {
+    if (!state.loc) { goToStep(1); return; }
+    var radius = RADIUS_STEPS[state.radiusIdx];
+    var query = buildOverpassQuery(state.loc.lat, state.loc.lon, radius);
+    $("btnFetch").disabled = true;
+    showFetchStatus("Asking OpenStreetMap what's around you…", false);
+
+    tryOverpass(0, query)
+      .then(function (data) {
+        hideFetchStatus();
+        $("btnFetch").disabled = false;
+        var places = processOverpassResults(data, state.loc);
+        if (!places.length) {
+          showFetchStatus("No named food spots found in this radius — try a wider radius.", true);
+          return;
+        }
+        state.places = places;
+        state.subRadius = radius;
+        $("subRadiusSlider").max = radius;
+        $("subRadiusSlider").value = radius;
+        $("subRadiusValue").textContent = fmtDist(radius);
+        buildCuisineFacets();
+        applyFilters();
+        goToStep(3);
+      })
+      .catch(function () {
+        $("btnFetch").disabled = false;
+        showFetchStatus("Couldn't reach OpenStreetMap right now — check your connection and try again.", true);
+      });
+  }
+
+  function processOverpassResults(data, loc) {
+    var out = [];
+    var seen = new Set();
+    (data.elements || []).forEach(function (elm) {
+      var tags = elm.tags || {};
+      if (!tags.name) return;
+      var lat = elm.lat != null ? elm.lat : (elm.center ? elm.center.lat : null);
+      var lon = elm.lon != null ? elm.lon : (elm.center ? elm.center.lon : null);
+      if (lat == null || lon == null) return;
+      var key = tags.name.toLowerCase() + "|" + lat.toFixed(4) + "|" + lon.toFixed(4);
+      if (seen.has(key)) return;
+      seen.add(key);
+      var dist = haversine(loc.lat, loc.lon, lat, lon);
+      out.push({
+        id: elm.type + "/" + elm.id,
+        name: tags.name,
+        lat: lat, lon: lon,
+        dist: dist,
+        tags: tags,
+        category: categoryLabel(tags),
+        cuisines: parseCuisines(tags.cuisine),
+        priceBucket: priceBucket(tags)
+      });
+    });
+    out.sort(function (a, b) { return a.dist - b.dist; });
+    return out;
+  }
+
+  function categoryLabel(tags) {
+    if (tags.shop === "bakery") return "Bakery";
+    var map = {
+      restaurant: "Restaurant", cafe: "Café", fast_food: "Fast food",
+      food_court: "Food court / hawker", pub: "Pub", bar: "Bar",
+      ice_cream: "Ice cream", biergarten: "Beer garden"
+    };
+    return map[tags.amenity] || "Eatery";
+  }
+  function parseCuisines(cuisineTag) {
+    if (!cuisineTag) return [];
+    return cuisineTag.split(";").map(function (c) { return titleCase(c.trim()); }).filter(Boolean);
+  }
+  function priceBucket(tags) {
+    var raw = tags.price_level || tags["price:range"] || tags.price;
+    if (!raw) return "unlisted";
+    var n = parseInt(raw, 10);
+    if (!isNaN(n)) {
+      if (n <= 1) return "budget";
+      if (n === 2) return "mid";
+      return "pricier";
+    }
+    return "unlisted";
+  }
+  function dietOk(tags, need) {
+    var v = tags["diet:" + need];
+    return v === "yes" || v === "only";
+  }
+
+  /* ---------- STEP 3: filters ---------- */
+  function buildCuisineFacets() {
+    var counts = {};
+    state.places.forEach(function (p) {
+      p.cuisines.forEach(function (c) { counts[c] = (counts[c] || 0) + 1; });
+    });
+    state.cuisines = counts;
+    state.activeCuisines = new Set();
+    var top = Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a]; }).slice(0, 12);
+    var wrap = $("cuisineChips");
+    wrap.innerHTML = "";
+    if (!top.length) {
+      $("cuisineGroup").style.display = "none";
+    } else {
+      $("cuisineGroup").style.display = "";
+      top.forEach(function (c) {
+        var chip = el("button", "chip", null);
+        chip.type = "button";
+        chip.setAttribute("aria-pressed", "false");
+        chip.innerHTML = c + ' <span class="n">' + counts[c] + "</span>";
+        chip.addEventListener("click", function () {
+          var pressed = chip.getAttribute("aria-pressed") === "true";
+          chip.setAttribute("aria-pressed", pressed ? "false" : "true");
+          if (pressed) state.activeCuisines.delete(c); else state.activeCuisines.add(c);
+          applyFilters();
+        });
+        wrap.appendChild(chip);
+      });
+    }
+  }
+
+  $("subRadiusSlider").addEventListener("input", function (e) {
+    state.subRadius = parseInt(e.target.value, 10);
+    $("subRadiusValue").textContent = fmtDist(state.subRadius);
+    applyFilters();
+  });
+
+  Array.prototype.forEach.call($("dietChips").children, function (chip) {
+    chip.addEventListener("click", function () {
+      var pressed = chip.getAttribute("aria-pressed") === "true";
+      chip.setAttribute("aria-pressed", pressed ? "false" : "true");
+      var d = chip.getAttribute("data-diet");
+      if (pressed) state.activeDiets.delete(d); else state.activeDiets.add(d);
+      applyFilters();
+    });
+  });
+  Array.prototype.forEach.call($("priceChips").children, function (chip) {
+    chip.addEventListener("click", function () {
+      var pressed = chip.getAttribute("aria-pressed") === "true";
+      chip.setAttribute("aria-pressed", pressed ? "false" : "true");
+      var p = chip.getAttribute("data-price");
+      if (pressed) state.activePrices.delete(p); else state.activePrices.add(p);
+      applyFilters();
+    });
+  });
+
+  $("btnClearFilters").addEventListener("click", function () {
+    state.activeCuisines.clear();
+    state.activeDiets.clear();
+    state.activePrices.clear();
+    Array.prototype.forEach.call(document.querySelectorAll(".chip"), function (c) {
+      c.setAttribute("aria-pressed", "false");
+    });
+    applyFilters();
+  });
+
+  function applyFilters() {
+    var f = state.places.filter(function (p) {
+      if (p.dist > state.subRadius) return false;
+      if (state.activeCuisines.size) {
+        var hit = p.cuisines.some(function (c) { return state.activeCuisines.has(c); });
+        if (!hit) return false;
+      }
+      if (state.activeDiets.size) {
+        var okAll = true;
+        state.activeDiets.forEach(function (d) { if (!dietOk(p.tags, d)) okAll = false; });
+        if (!okAll) return false;
+      }
+      if (state.activePrices.size && !state.activePrices.has(p.priceBucket)) return false;
+      return true;
+    });
+    state.filtered = f;
+    renderMatchState();
+  }
+
+  function renderMatchState() {
+    var n = state.filtered.length;
+    $("matchCount").innerHTML = n + ' <small>spot' + (n === 1 ? "" : "s") + " match" + (n === 1 ? "es" : "") + "</small>";
+    $("btnSpinGo").disabled = n < 1;
+
+    var list = $("previewList");
+    list.innerHTML = "";
+    state.filtered.slice(0, 40).forEach(function (p) {
+      var item = el("div", "preview-item");
+      var dot = el("span", "tag-dot");
+      dot.style.background = WHEEL_COLORS[hashStr(p.id) % WHEEL_COLORS.length];
+      item.appendChild(dot);
+      item.appendChild(el("span", null, p.name));
+      var dist = el("span", "dist mono", fmtDist(p.dist));
+      item.appendChild(dist);
+      list.appendChild(item);
+    });
+    $("previewCard").style.display = n ? "" : "none";
+  }
+  function hashStr(s) {
+    var h = 0;
+    for (var i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) | 0; }
+    return Math.abs(h);
+  }
+
+  $("btnSpinGo").addEventListener("click", function () {
+    if (!state.filtered.length) return;
+    if (state.filtered.length === 1) {
+      showResult(state.filtered[0]);
+      return;
+    }
+    prepareWheelList();
+    goToStep(4);
+    drawWheel();
+  });
+
+  /* ---------- STEP 4: wheel ---------- */
+  function prepareWheelList() {
+    if (state.filtered.length <= WHEEL_CAP) {
+      state.wheelList = state.filtered.slice();
+      $("btnReshuffle").style.display = "none";
+      $("wheelNote").textContent = state.wheelList.length + " spots on the wheel.";
+    } else {
+      state.wheelList = shuffle(state.filtered).slice(0, WHEEL_CAP);
+      $("btnReshuffle").style.display = "";
+      $("wheelNote").textContent = "Showing a random " + WHEEL_CAP + " of " + state.filtered.length + " matches.";
+    }
+    state.rotation = 0;
+  }
+  $("btnReshuffle").addEventListener("click", function () {
+    if (state.spinning) return;
+    prepareWheelList();
+    drawWheel();
+  });
+  $("btnBackToFilters").addEventListener("click", function () { goToStep(3); });
+
+  var canvas = $("wheel");
+  var ctx = canvas.getContext("2d");
+
+  function drawWheel(extraRotation) {
+    var n = state.wheelList.length;
+    if (!n) return;
+    var size = canvas.width;
+    var cx = size / 2, cy = size / 2, r = size / 2 - 6;
+    var seg = (2 * Math.PI) / n;
+    var rot = extraRotation != null ? extraRotation : state.rotation;
+
+    ctx.clearRect(0, 0, size, size);
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(rot);
+
+    for (var i = 0; i < n; i++) {
+      var start = i * seg;
+      var end = start + seg;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, r, start, end);
+      ctx.closePath();
+      ctx.fillStyle = WHEEL_COLORS[i % WHEEL_COLORS.length];
+      ctx.fill();
+
+      ctx.save();
+      ctx.rotate(start + seg / 2);
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "#FFFFFF";
+      var fontSize = Math.max(13, Math.min(20, 320 / n));
+      ctx.font = "700 " + fontSize + "px Manrope, sans-serif";
+      var label = state.wheelList[i].name;
+      var maxChars = n > 14 ? 12 : 18;
+      if (label.length > maxChars) label = label.slice(0, maxChars - 1) + "…";
+      ctx.shadowColor = "rgba(0,0,0,0.35)";
+      ctx.shadowBlur = 3;
+      ctx.fillText(label, r - 14, 0);
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  function easeOutQuint(t) { return 1 - Math.pow(1 - t, 5); }
+
+  $("btnSpin").addEventListener("click", function () {
+    if (state.spinning || !state.wheelList.length) return;
+    state.spinning = true;
+    $("btnSpin").disabled = true;
+    $("btnReshuffle").disabled = true;
+
+    var n = state.wheelList.length;
+    var seg = (2 * Math.PI) / n;
+    var winnerIdx = randomInt(n);
+    var jitter = seg * (0.15 + 0.7 * Math.random());
+    var winnerAngle = winnerIdx * seg + jitter;
+    var pointerAngle = -Math.PI / 2;
+
+    var reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    var extraTurns = reducedMotion ? 1 : (5 + Math.floor(Math.random() * 2));
+    var targetRotation = pointerAngle - winnerAngle + extraTurns * 2 * Math.PI;
+    while (targetRotation < state.rotation + Math.PI) targetRotation += 2 * Math.PI;
+
+    var startRotation = state.rotation;
+    var duration = reducedMotion ? 500 : 4200;
+    var startTime = null;
+
+    function frame(ts) {
+      if (startTime === null) startTime = ts;
+      var elapsed = ts - startTime;
+      var t = Math.min(1, elapsed / duration);
+      var eased = easeOutQuint(t);
+      var current = startRotation + (targetRotation - startRotation) * eased;
+      state.rotation = current;
+      drawWheel(current);
+      if (t < 1) {
+        requestAnimationFrame(frame);
+      } else {
+        state.spinning = false;
+        $("btnSpin").disabled = false;
+        $("btnReshuffle").disabled = false;
+        showResult(state.wheelList[winnerIdx]);
+      }
+    }
+    requestAnimationFrame(frame);
+  });
+
+  /* ---------- result ---------- */
+  var lastWinner = null;
+  function showResult(place) {
+    lastWinner = place;
+    $("resultName").textContent = place.name;
+
+    var meta = $("resultMeta");
+    meta.innerHTML = "";
+    meta.appendChild(el("span", "meta-pill", place.category));
+    if (place.cuisines.length) meta.appendChild(el("span", "meta-pill", place.cuisines.slice(0, 2).join(" · ")));
+    meta.appendChild(el("span", "meta-pill num", fmtDist(place.dist) + " · " + fmtWalk(place.dist)));
+
+    var addrParts = [];
+    if (place.tags["addr:housenumber"]) addrParts.push(place.tags["addr:housenumber"]);
+    if (place.tags["addr:street"]) addrParts.push(place.tags["addr:street"]);
+    if (place.tags["addr:unit"]) addrParts.push("#" + place.tags["addr:unit"]);
+    var addr = addrParts.length ? addrParts.join(" ") : "Address not listed on OpenStreetMap";
+    $("resultAddress").textContent = addr;
+
+    var q = encodeURIComponent(place.name + " " + place.lat + "," + place.lon);
+    $("resultMapsLink").href = "https://www.google.com/maps/search/?api=1&query=" + q;
+
+    $("resultOverlay").style.display = "flex";
+  }
+  $("btnCloseResult").addEventListener("click", function () { $("resultOverlay").style.display = "none"; });
+  $("btnSpinAgain").addEventListener("click", function () {
+    $("resultOverlay").style.display = "none";
+    drawWheel();
+  });
+  $("btnNotFeelingIt").addEventListener("click", function () {
+    $("resultOverlay").style.display = "none";
+    if (lastWinner) {
+      state.filtered = state.filtered.filter(function (p) { return p.id !== lastWinner.id; });
+      state.wheelList = state.wheelList.filter(function (p) { return p.id !== lastWinner.id; });
+      renderMatchState();
+    }
+    if (!state.wheelList.length) { goToStep(3); return; }
+    drawWheel();
+  });
+
+  /* ---------- resume from saved location on load ---------- */
+  if (state.loc) {
+    $("locChipText").textContent = state.loc.label;
+  }
+
+  window.addEventListener("resize", function () {
+    if ($("screen-4").classList.contains("active")) drawWheel();
+  });
+
+})();
+</script>
+</body>
+</html>
