@@ -13,7 +13,13 @@ Can't decide where to eat? This is a single-page web app that finds real food sp
 - **Result** — name, distance, walking time, and a one-tap link to open it in Google Maps. The link uses the place's name and street address (when OpenStreetMap has one tagged) so it lands on the actual business listing rather than a generic pin — falls back to name + coordinates when no address is tagged.
 - **Changing your mind** — a "Change" button on the location pill (shown on both the radius and filters screens) lets you jump straight back to the address search at any point in the flow.
 
-No backend, no build step, no API keys, no cost. It's one HTML file that runs entirely in the browser.
+No backend, no build step, no API keys required, no cost. It's one HTML file that runs entirely in the browser.
+
+### Optional: OneMap Hawker Centres layer
+
+OneMap (Singapore's government geocoder) doesn't offer a general restaurant/cafe search — only curated datasets, one of which is official **Hawker Centre** building locations. If you want that layer merged into your results (on top of the regular OpenStreetMap search, which stays the source for everything else), paste a OneMap API access token into the `ONEMAP_ACCESS_TOKEN` constant near the top of the `<script>` block in `index.html`.
+
+To get a token: register a free account at [onemap.gov.sg](https://www.onemap.gov.sg/apidocs/) and `POST` your email + password to `/api/auth/post/getToken`. **Tokens expire after about 3 days.** Since this is a static site with no backend to auto-refresh one, you'll need to paste in a fresh token every few days to keep this layer active. When the field is left blank, or a token has expired, the app just quietly searches OpenStreetMap alone — nothing breaks either way.
 
 ### Data limitations (it's worth knowing)
 

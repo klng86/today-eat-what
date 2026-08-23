@@ -660,6 +660,18 @@
   var MIN_RESULTS_BEFORE_AUTO_WIDEN = 6;
   var MAX_AUTO_WIDEN_STEPS = 2;
 
+  // Optional: paste a OneMap API access token here to merge in an extra
+  // "Hawker Centres" layer — official government building locations from
+  // OneMap's Themes API, on top of the regular OpenStreetMap search below.
+  // Get a free token at https://www.onemap.gov.sg/apidocs/ (register, then
+  // POST your email+password to /api/auth/post/getToken). OneMap tokens
+  // expire after ~3 days and this is a static site with no backend to
+  // refresh one automatically, so you'll need to paste in a fresh token
+  // occasionally to keep this layer active — when this is blank or the
+  // token has expired, the app just quietly skips it and searches
+  // OpenStreetMap alone, exactly as before. Nothing else breaks.
+  var ONEMAP_ACCESS_TOKEN = "";
+
   /* ---------- state ---------- */
   var state = {
     loc: null,            // {lat, lon, label}
@@ -1189,6 +1201,14 @@
     tryOverpass(query)
       .then(function (data) {
         var places = processOverpassResults(data, state.loc);
+        // Merge in OneMap's official Hawker Centres layer, if a token is
+        // configured — resolves to `places` unchanged (with no delay worth
+        // noticing) when there's no token, the token's expired, or the
+        // request fails for any reason.
+        return fetchHawkerCentres(state.loc.lat, state.loc.lon, radius, state.loc)
+          .then(function (hawkerPlaces) { return mergeHawkerCentres(places, hawkerPlaces); });
+      })
+      .then(function (places) {
         var canWiden = radiusIdx < RADIUS_STEPS.length - 1 && widenCount < MAX_AUTO_WIDEN_STEPS;
         if (places.length < MIN_RESULTS_BEFORE_AUTO_WIDEN && canWiden) {
           attemptFetch(radiusIdx + 1, startIdx, widenCount + 1);
@@ -1288,6 +1308,107 @@
   function dietOk(tags, need) {
     var v = tags["diet:" + need];
     return v === "yes" || v === "only";
+  }
+
+  /* ---------- OneMap Hawker Centres bonus layer (optional) ---------- */
+  // OneMap's Themes API doesn't offer a general restaurant/cafe search —
+  // it only serves curated government datasets, one of which is official
+  // Hawker Centre building locations. We fetch that once per search (when a
+  // token is set) and merge it in alongside the OpenStreetMap results,
+  // de-duplicating against anything OSM already found at essentially the
+  // same spot. Every step here degrades silently on any failure (missing
+  // token, expired token, network error) — this is strictly a bonus on top
+  // of the OSM search, never a requirement for the app to work.
+  var hawkerThemeQueryName = null; // discovered once per page load, then cached
+  var hawkerThemeDiscoveryFailed = false;
+
+  function oneMapAuthHeaders() {
+    return { "Authorization": "Bearer " + ONEMAP_ACCESS_TOKEN };
+  }
+
+  function stripHtml(s) {
+    return (s || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  }
+
+  function discoverHawkerThemeQueryName() {
+    if (!ONEMAP_ACCESS_TOKEN) return Promise.resolve(null);
+    if (hawkerThemeQueryName) return Promise.resolve(hawkerThemeQueryName);
+    if (hawkerThemeDiscoveryFailed) return Promise.resolve(null);
+
+    return fetch("https://www.onemap.gov.sg/api/public/themesvc/getAllThemesInfo?moreInfo=Y", {
+      headers: oneMapAuthHeaders()
+    }).then(function (r) {
+      if (!r.ok) throw new Error("getAllThemesInfo bad status " + r.status);
+      return r.json();
+    }).then(function (data) {
+      var themes = (data && data.Theme_Names) || [];
+      var match = themes.find(function (t) { return /hawker/i.test(t.THEMENAME || ""); });
+      if (!match) throw new Error("no hawker theme found");
+      hawkerThemeQueryName = match.QUERYNAME;
+      return hawkerThemeQueryName;
+    }).catch(function () {
+      hawkerThemeDiscoveryFailed = true;
+      return null;
+    });
+  }
+
+  // Rough meters -> degrees conversion (fine at this precision for a bbox).
+  function bboxExtents(lat, lon, radiusMeters) {
+    var dLat = radiusMeters / 111320;
+    var dLon = radiusMeters / (111320 * Math.cos(toRad(lat)) || 1);
+    return (lat - dLat) + "," + (lon - dLon) + "," + (lat + dLat) + "," + (lon + dLon);
+  }
+
+  function parseHawkerFeature(r, loc) {
+    var m = /(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/.exec(r.LatLng || "");
+    if (!m) return null;
+    var lat = parseFloat(m[1]), lon = parseFloat(m[2]);
+    var name = r.NAME || "Hawker Centre";
+    var descText = stripHtml(r.DESCRIPTION);
+    var postalMatch = /\b(\d{6})\b/.exec(descText);
+    var tags = { name: name, amenity: "food_court", source: "onemap" };
+    if (postalMatch) tags["addr:postcode"] = postalMatch[1];
+    return {
+      id: "onemap/hawker/" + name.toLowerCase().replace(/\s+/g, "-") + "/" + lat.toFixed(4) + "-" + lon.toFixed(4),
+      name: name,
+      lat: lat, lon: lon,
+      dist: haversine(loc.lat, loc.lon, lat, lon),
+      tags: tags,
+      category: "Hawker Centre",
+      cuisines: [],
+      priceBucket: "unlisted"
+    };
+  }
+
+  function fetchHawkerCentres(lat, lon, radiusMeters, loc) {
+    return discoverHawkerThemeQueryName().then(function (queryName) {
+      if (!queryName) return [];
+      var extents = bboxExtents(lat, lon, radiusMeters);
+      var url = "https://www.onemap.gov.sg/api/public/themesvc/retrieveTheme?queryName="
+        + encodeURIComponent(queryName) + "&extents=" + encodeURIComponent(extents);
+      return fetch(url, { headers: oneMapAuthHeaders() }).then(function (r) {
+        if (!r.ok) throw new Error("retrieveTheme bad status " + r.status);
+        return r.json();
+      }).then(function (data) {
+        return (data.SrchResults || [])
+          .map(function (r) { return parseHawkerFeature(r, loc); })
+          .filter(Boolean);
+      });
+    }).catch(function () {
+      return [];
+    });
+  }
+
+  // Drop any OneMap hawker centre that's essentially the same physical
+  // building as something OSM already found (within ~60m) so the wheel
+  // never shows the same food court twice under two different sources.
+  function mergeHawkerCentres(places, hawkerPlaces) {
+    if (!hawkerPlaces.length) return places;
+    var fresh = hawkerPlaces.filter(function (h) {
+      return !places.some(function (p) { return haversine(p.lat, p.lon, h.lat, h.lon) < 60; });
+    });
+    if (!fresh.length) return places;
+    return places.concat(fresh).sort(function (a, b) { return a.dist - b.dist; });
   }
 
   /* ---------- STEP 3: filters ---------- */
@@ -1535,7 +1656,7 @@
     if (place.tags["addr:housenumber"]) addrParts.push(place.tags["addr:housenumber"]);
     if (place.tags["addr:street"]) addrParts.push(place.tags["addr:street"]);
     if (place.tags["addr:unit"]) addrParts.push("#" + place.tags["addr:unit"]);
-    var addr = addrParts.length ? addrParts.join(" ") : "Address not listed on OpenStreetMap";
+    var addr = addrParts.length ? addrParts.join(" ") : "Address not listed";
     $("resultAddress").textContent = addr;
 
     // Prefer name + street address for the Maps link — Google's own search
@@ -1548,6 +1669,11 @@
       var addrForQuery = addrParts.join(" ");
       if (place.tags["addr:postcode"]) addrForQuery += " " + place.tags["addr:postcode"];
       mapQuery = place.name + ", " + addrForQuery;
+    } else if (place.tags["addr:postcode"]) {
+      // No street address, but a postal code alone (e.g. from the OneMap
+      // hawker centres layer) still helps Google narrow to the right
+      // building far better than raw coordinates do on their own.
+      mapQuery = place.name + ", Singapore " + place.tags["addr:postcode"];
     } else {
       mapQuery = place.name + " " + place.lat + "," + place.lon;
     }
