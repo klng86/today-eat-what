@@ -1,6 +1,6 @@
 {
   "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoyMjA3MiwiZm9yZXZlciI6ZmFsc2UsImlzcyI6Ik9uZU1hcCIsImlhdCI6MTc5NTM0MzM4OSwibmJmIjoxNzk1MzQzMzg5LCJleHAiOjE3OTU2MDI1ODksImp0aSI6ImI2ZWQzNDQyLTllMWQtNDc0Ny05N2VhLWYzZGNkOGQ3OTNkZSJ9.bCFIF1VUjYZkNgusGbscFBJoCbe_tL2ZAer3wSWbuAmQ2d_bIhGzh-qqNqKNKYDrUWg36_FwOLtYI8RgdKPGyvuUuxdGEQaf40_BjV8W7XKAOdC_RiKlBBJJbFcTrzH-nzLwXA-v-rFmVwwEkE6Q4tno9bTR198VDe5bcKwkGntjsyrTy1Ho0NUm1mdD5YUSB9CozvJKXHHv2f5RGCOKoDc8Y-AXWa3VG1VwAc8OtnZXq5iCvjlYllrMZWHDdYTbaBON0qgQtNKXY2Wr0dSympGonrrFltgERsiGiyzP3gkxnjCqd1dOTzkCvBSfwUw1OtI5tp6j5BRCiJZkrpGIZw",
   "expiry_timestamp": "1795602589",
-  "refreshed_at": "2026-11-22T10:29:49Z",
+  "refreshed_at": "2026-11-23T11:29:28Z",
   "note": "Auto-refreshed by .github/workflows/refresh-onemap-token.yml — do not edit by hand, it will be overwritten."
 }
